@@ -1,7 +1,7 @@
 // Bank-account program reads a random-access file sequentially,
 // updates data already written to the file, creates new data to
 // be placed in the file, and deletes data previously in the file.
-// Refactored for SPEED: In-memory processing.
+// Refactored for SPEED: In-memory processing with Dirty Flag.
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -19,9 +19,9 @@ struct clientData
 // prototypes
 unsigned int enterChoice(void);
 void textFile(struct clientData accounts[]);
-void updateRecord(struct clientData accounts[]);
-void newRecord(struct clientData accounts[]);
-void deleteRecord(struct clientData accounts[]);
+void updateRecord(struct clientData accounts[], int *isModified);
+void newRecord(struct clientData accounts[], int *isModified);
+void deleteRecord(struct clientData accounts[], int *isModified);
 void displayAllRecords(struct clientData accounts[]);
 
 int main(int argc, char *argv[])
@@ -29,6 +29,7 @@ int main(int argc, char *argv[])
     FILE *cfPtr;         // credit.dat file pointer
     unsigned int choice; // user's choice
     struct clientData accounts[MAX_ACCOUNTS];
+    int isModified = 0;  // dirty flag for speed optimization
 
     // Initialize in-memory accounts array
     struct clientData blankClient = {0, "", "", 0.0};
@@ -57,13 +58,13 @@ int main(int argc, char *argv[])
             textFile(accounts);
             break;
         case 2:
-            updateRecord(accounts);
+            updateRecord(accounts, &isModified);
             break;
         case 3:
-            newRecord(accounts);
+            newRecord(accounts, &isModified);
             break;
         case 4:
-            deleteRecord(accounts);
+            deleteRecord(accounts, &isModified);
             break;
         case 5:
             displayAllRecords(accounts);
@@ -74,16 +75,23 @@ int main(int argc, char *argv[])
         } // end switch
     }     // end while
 
-    // Save all records back to file upon exiting (Refactored for efficiency)
-    if ((cfPtr = fopen("credit.dat", "wb")) == NULL)
+    // Only write to disk if data was actually modified (Speed Optimization)
+    if (isModified)
     {
-        printf("Error: Could not save data to credit.dat.\n");
-        exit(EXIT_FAILURE);
+        if ((cfPtr = fopen("credit.dat", "wb")) == NULL)
+        {
+            printf("Error: Could not save data to credit.dat.\n");
+            exit(EXIT_FAILURE);
+        }
+        fwrite(accounts, sizeof(struct clientData), MAX_ACCOUNTS, cfPtr);
+        fclose(cfPtr);
+        printf("Data successfully saved. Exiting...\n");
     }
-    fwrite(accounts, sizeof(struct clientData), MAX_ACCOUNTS, cfPtr);
-    fclose(cfPtr);
+    else
+    {
+        printf("No changes made. Exiting quickly without saving...\n");
+    }
     
-    printf("Data successfully saved. Exiting...\n");
     return 0;
 } // end main
 
@@ -116,7 +124,7 @@ void textFile(struct clientData accounts[])
 } // end function textFile
 
 // update balance in record
-void updateRecord(struct clientData accounts[])
+void updateRecord(struct clientData accounts[], int *isModified)
 {
     unsigned int account; // account number
     double transaction;   // transaction amount
@@ -145,11 +153,12 @@ void updateRecord(struct clientData accounts[])
         printf("%-6d%-16s%-11s%10.2f\n", accounts[account - 1].acctNum, 
                accounts[account - 1].lastName, accounts[account - 1].firstName, accounts[account - 1].balance);
         printf("Account updated successfully.\n");
+        *isModified = 1; // Mark data as dirty
     }
 } // end function updateRecord
 
 // delete an existing record
-void deleteRecord(struct clientData accounts[])
+void deleteRecord(struct clientData accounts[], int *isModified)
 {
     struct clientData blankClient = {0, "", "", 0}; // blank client
     unsigned int accountNum;                        // account number
@@ -170,11 +179,12 @@ void deleteRecord(struct clientData accounts[])
         // replace existing record with blank record
         accounts[accountNum - 1] = blankClient;
         printf("Account %d deleted successfully.\n", accountNum);
+        *isModified = 1; // Mark data as dirty
     }
 } // end function deleteRecord
 
 // create and insert record
-void newRecord(struct clientData accounts[])
+void newRecord(struct clientData accounts[], int *isModified)
 {
     unsigned int accountNum; // account number
 
@@ -197,6 +207,7 @@ void newRecord(struct clientData accounts[])
               accounts[accountNum - 1].firstName, &accounts[accountNum - 1].balance);
         accounts[accountNum - 1].acctNum = accountNum;
         printf("Account created successfully.\n");
+        *isModified = 1; // Mark data as dirty
     }
 } // end function newRecord
 
