@@ -2,8 +2,10 @@
 // updates data already written to the file, creates new data to
 // be placed in the file, and deletes data previously in the file.
 // Refactored for SPEED: In-memory processing with Dirty Flag.
+// Refactored for INNOVATION: Added Search, Transfer, and Statistics.
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // clientData structure definition
 struct clientData
@@ -23,6 +25,10 @@ void updateRecord(struct clientData accounts[], int *isModified);
 void newRecord(struct clientData accounts[], int *isModified);
 void deleteRecord(struct clientData accounts[], int *isModified);
 void displayAllRecords(struct clientData accounts[]);
+// New advanced feature prototypes
+void searchByName(struct clientData accounts[]);
+void transferFunds(struct clientData accounts[], int *isModified);
+void bankStatistics(struct clientData accounts[]);
 
 int main(int argc, char *argv[])
 {
@@ -50,7 +56,7 @@ int main(int argc, char *argv[])
     }
 
     // enable user to specify action
-    while ((choice = enterChoice()) != 6)
+    while ((choice = enterChoice()) != 9)
     {
         switch (choice)
         {
@@ -68,6 +74,15 @@ int main(int argc, char *argv[])
             break;
         case 5:
             displayAllRecords(accounts);
+            break;
+        case 6:
+            searchByName(accounts);
+            break;
+        case 7:
+            transferFunds(accounts, &isModified);
+            break;
+        case 8:
+            bankStatistics(accounts);
             break;
         default:
             puts("Incorrect choice");
@@ -226,6 +241,145 @@ void displayAllRecords(struct clientData accounts[])
     }
 } // end function displayAllRecords
 
+// search for an account by name
+void searchByName(struct clientData accounts[])
+{
+    char searchName[15];
+    int found = 0;
+
+    printf("Enter last name or first name to search: ");
+    scanf("%14s", searchName);
+
+    printf("\nSearch Results for \"%s\":\n", searchName);
+    printf("%-6s%-16s%-11s%10s\n", "Acct", "Last Name", "First Name", "Balance");
+
+    for (int i = 0; i < MAX_ACCOUNTS; ++i)
+    {
+        if (accounts[i].acctNum != 0)
+        {
+            // Simple case-sensitive search
+            if (strcmp(accounts[i].lastName, searchName) == 0 || 
+                strcmp(accounts[i].firstName, searchName) == 0)
+            {
+                printf("%-6d%-16s%-11s%10.2f\n", accounts[i].acctNum, 
+                       accounts[i].lastName, accounts[i].firstName, accounts[i].balance);
+                found = 1;
+            }
+        }
+    }
+
+    if (!found)
+    {
+        printf("No accounts found matching that name.\n");
+    }
+} // end function searchByName
+
+// transfer funds between two accounts
+void transferFunds(struct clientData accounts[], int *isModified)
+{
+    unsigned int fromAccount, toAccount;
+    double amount;
+
+    // obtain from account
+    do {
+        printf("Enter account to transfer FROM ( 1 - 100 ): ");
+        scanf("%u", &fromAccount);
+    } while (fromAccount < 1 || fromAccount > 100);
+
+    if (accounts[fromAccount - 1].acctNum == 0)
+    {
+        printf("Source account #%d has no information.\n", fromAccount);
+        return;
+    }
+
+    // obtain to account
+    do {
+        printf("Enter account to transfer TO ( 1 - 100 ): ");
+        scanf("%u", &toAccount);
+    } while (toAccount < 1 || toAccount > 100);
+
+    if (accounts[toAccount - 1].acctNum == 0)
+    {
+        printf("Destination account #%d has no information.\n", toAccount);
+        return;
+    }
+
+    if (fromAccount == toAccount)
+    {
+        printf("Cannot transfer to the same account.\n");
+        return;
+    }
+
+    printf("Enter amount to transfer: ");
+    scanf("%lf", &amount);
+
+    if (amount <= 0)
+    {
+        printf("Invalid transfer amount.\n");
+        return;
+    }
+
+    if (accounts[fromAccount - 1].balance < amount)
+    {
+        printf("Insufficient funds in account #%d. Balance is %.2f\n", fromAccount, accounts[fromAccount - 1].balance);
+        return;
+    }
+
+    // Perform transfer
+    accounts[fromAccount - 1].balance -= amount;
+    accounts[toAccount - 1].balance += amount;
+
+    printf("\nTransfer successful!\n");
+    printf("New Balance for Account #%d: %.2f\n", fromAccount, accounts[fromAccount - 1].balance);
+    printf("New Balance for Account #%d: %.2f\n", toAccount, accounts[toAccount - 1].balance);
+
+    *isModified = 1; // Mark data as dirty
+} // end function transferFunds
+
+// show bank statistics
+void bankStatistics(struct clientData accounts[])
+{
+    double totalBalance = 0.0;
+    double maxBalance = -99999999.0;
+    double minBalance = 99999999.0;
+    int maxAcct = -1, minAcct = -1;
+    int activeAccounts = 0;
+
+    for (int i = 0; i < MAX_ACCOUNTS; ++i)
+    {
+        if (accounts[i].acctNum != 0)
+        {
+            activeAccounts++;
+            totalBalance += accounts[i].balance;
+
+            if (accounts[i].balance > maxBalance)
+            {
+                maxBalance = accounts[i].balance;
+                maxAcct = accounts[i].acctNum;
+            }
+
+            if (accounts[i].balance < minBalance)
+            {
+                minBalance = accounts[i].balance;
+                minAcct = accounts[i].acctNum;
+            }
+        }
+    }
+
+    printf("\n=== Bank Statistics ===\n");
+    if (activeAccounts == 0)
+    {
+        printf("No active accounts in the bank.\n");
+        return;
+    }
+
+    printf("Total Active Accounts: %d\n", activeAccounts);
+    printf("Total Bank Balance: %.2f\n", totalBalance);
+    printf("Highest Balance: %.2f (Account #%d)\n", maxBalance, maxAcct);
+    printf("Lowest Balance: %.2f (Account #%d)\n", minBalance, minAcct);
+    printf("=======================\n");
+} // end function bankStatistics
+
 // enable user to input menu choice
 unsigned int enterChoice(void)
 {
@@ -238,7 +392,10 @@ unsigned int enterChoice(void)
                  "3 - add a new account\n"
                  "4 - delete an account\n"
                  "5 - list all accounts\n"
-                 "6 - end program\n? ");
+                 "6 - search by name\n"
+                 "7 - transfer funds\n"
+                 "8 - bank statistics\n"
+                 "9 - end program\n? ");
 
     scanf("%u", &menuChoice); // receive choice from user
     return menuChoice;
